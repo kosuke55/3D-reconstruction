@@ -29,7 +29,7 @@ void callback(sensor_msgs::PointCloud2 cloud_raw)
     // static int pcd_index = 0;
     //ROS_INFO("----------processing pointcloud...");
     pcl::PointCloud<PointT>::Ptr cloud_ptr (new pcl::PointCloud<PointT>);
-    std::string filename = "/home/donyan/Desktop/kinect/src/scanner/data/" + std::to_string(pcd_index) + ".pcd";
+    std::string filename = "/home/kosuke/catkin_ws/src/scanner/data/" + std::to_string(pcd_index) + ".pcd";
 
     //ROS_INFO("Processing #%i PointCloud...", pcd_index);
     // change PC format from PointCloud2 to pcl::PointCloud<PointT>
@@ -37,7 +37,7 @@ void callback(sensor_msgs::PointCloud2 cloud_raw)
     //std::cout<<"processing pointcloud..."<<*cloud_ptr<<std::endl;
 
     // crop, segment, filter
-    cloud_ptr = cloud_filter(cloud_ptr);
+    // cloud_ptr = cloud_filter(cloud_ptr);
 
     // save PCD file to local folder
     pcl::io::savePCDFileBinary (filename, *cloud_ptr);
@@ -55,7 +55,8 @@ int main (int argc, char **argv)
     ros::NodeHandle nh; // can sub and pub use the same NodeHandle?
     std::cout<<"start..."<<std::endl;
     //ros::Subscriber sub = nh.subscribe("/kinect2/qhd/points", 1 , callback);
-    ros::Subscriber sub = nh.subscribe("/head_camera/depth_registered/points", 1 , callback);
+    // ros::Subscriber sub = nh.subscribe("/head_camera/depth_registered/points", 1 , callback);
+    ros::Subscriber sub = nh.subscribe("/head_mount_kinect/qhd/republished_half_points_desktop", 1 , callback);
     ros::Publisher pub = nh.advertise<std_msgs::Int64> ("pcd_save_done", 1);
 
     ros::Rate loop_rate(1);

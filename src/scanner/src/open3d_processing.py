@@ -1,19 +1,20 @@
 #!/usr/bin/env python
 
-import rospy
-import numpy as np
+
 import copy
-from open3d import *
-
-from std_msgs.msg import Int64
-from geometry_msgs.msg import Vector3
-
-import sys
+import numpy as np
 import os
+import rospy
+import sys
+
+from geometry_msgs.msg import Vector3
+from modern_robotics import MatrixLog3, so3ToVec, AxisAng3
+from open3d import geometry, registration, io
+from std_msgs.msg import Int64
+
 current_path = os.path.dirname(__file__)
 module_path = os.path.join(current_path, '../lib')
 sys.path.append(module_path)
-from modern_robotics import MatrixLog3, so3ToVec, AxisAng3
 
 
 class registerMulti:
@@ -26,12 +27,18 @@ class registerMulti:
         self.posLocalTrans = np.identity(4)
 # test for loop detection info
         self.detectTransLoop = np.identity(4)
-# queue_size should be a little bit big, cause processing speed is not quick enough
-        self.sub = rospy.Subscriber("pcd_save_done", Int64, self.callback, queue_size = 10)
+# queue_size should be a little bit big, cause processing speed is not
+# quick enough
+        self.sub = rospy.Subscriber(
+            "pcd_save_done",
+            Int64,
+            self.callback,
+            queue_size=10)
         print("hello")
         self.rotation_dir = Vector3()
         self.rotation_dir_init_flag = False
-        self.sub_rotation_dir = rospy.Subscriber("plane_normal", Vector3, self.callback_dir, queue_size = 10)
+        self.sub_rotation_dir = rospy.Subscriber(
+            "plane_normal", Vector3, self.callback_dir, queue_size=10)
         print("hello")
 
     def callback(self, num):
@@ -44,14 +51,15 @@ class registerMulti:
         self.rotation_dir_init_flag = True
 
     def registering(self):
-        print("self.initFlag:",self.initFlag)
-        if self.initFlag == False:  # not the first cloud
+        print("self.initFlag:", self.initFlag)
+        if self.initFlag is False:  # not the first cloud
             # read the new cloud
             print("----------------")
             print("Have registered {} clouds;".format(self.registrationCount))
             print("Processing cloud {}...".format(self.cloud_index))
 
-            self.cloud2 = read_point_cloud("/home/donyan/Desktop/kinect/src/scanner/data/{}.pcd".format(self.cloud_index))
+            self.cloud2 = io.read_point_cloud(
+                "/home/kosuke/catkin_ws/src/scanner/data/{}.pcd".format(self.cloud_index))
             # self.cloud1 = read_point_cloud("/home/dylan2/catkin_ws/src/temp/pointCloudInRviz/data/{}.pcd".format(self.cloud_index-1))
 
             print("hello2")
@@ -59,40 +67,50 @@ class registerMulti:
             # source_temp = copy.deepcopy(self.cloud2)
             # target_temp = copy.deepcopy(self.cloud1)
             # print("cloud1: ",id(self.cloud1))
-            self.posLocalTrans = self.registerLocalCloud(self.cloud1, self.cloud2)
+            self.posLocalTrans = self.registerLocalCloud(
+                self.cloud1, self.cloud2)
             # self.posLocalTrans = self.registerLocalCloud(self.cloud1, self.cloud2)
-            
+
             print("hello", self.goodResultFlag)
             # if result is not good, drop it
-            if self.goodResultFlag == True:
+            if self.goodResultFlag:
                 # self.posLocalTrans = tempTrans
-# test for loop detection info
-                self.detectTransLoop = np.dot(self.posLocalTrans,self.detectTransLoop)
+                # test for loop detection info
+                self.detectTransLoop = np.dot(
+                    self.posLocalTrans, self.detectTransLoop)
                 # print ("==== loop detect trans ====")
                 # print(self.detectTransLoop)
                 # print ("==== ==== ==== ==== ==== ====")
-                self.posWorldTrans =  np.dot(self.posWorldTrans, self.posLocalTrans)
+                self.posWorldTrans = np.dot(
+                    self.posWorldTrans, self.posLocalTrans)
                 # update latest cloud
                 self.cloud1 = copy.deepcopy(self.cloud2)
                 self.cloud2.transform(self.posWorldTrans)
                 self.cloud_base = self.cloud_base + self.cloud2
 
                 # downsampling
-                self.cloud_base = voxel_down_sample(self.cloud_base ,0.001)
+                self.cloud_base = self.cloud_base.voxel_down_sample(0.001)
 
                 self.registrationCount += 1
                 # save PCD file to local
-                write_point_cloud("/home/donyan/Desktop/kinect/src/scanner/data/result/registerResult.pcd", self.cloud_base ,write_ascii = False)
+                io.write_point_cloud(
+                    "/home/kosuke/catkin_ws/src/scanner/data/result/registerResult.pcd",
+                    self.cloud_base,
+                    write_ascii=False)
 
             else:
                 pass
 
         # the first cloud
         else:
-            self.cloud_base = read_point_cloud("/home/donyan/Desktop/kinect/src/scanner/data/{}.pcd".format(self.cloud_index))
+            self.cloud_base = io.read_point_cloud(
+                "/home/kosuke/catkin_ws/src/scanner/data/{}.pcd".format(self.cloud_index))
             self.cloud1 = copy.deepcopy(self.cloud_base)
-            write_point_cloud("/home/donyan/Desktop/kinect/src/scanner/data/result/registerResult.pcd", self.cloud_base ,write_ascii = False)
-            if (self.rotation_dir_init_flag == True):
+            io.write_point_cloud(
+                "/home/kosuke/catkin_ws/src/scanner/data/result/registerResult.pcd",
+                self.cloud_base,
+                write_ascii=False)
+            if (self.rotation_dir_init_flag):
                 self.initFlag = False
 
     def registerLocalCloud(self, target, source):
@@ -107,25 +125,37 @@ class registerMulti:
         # print("target_temp: ",id(target_temp))
         # source_temp = source
         # target_temp = target
-        source_temp = voxel_down_sample(source_temp ,0.004)
-        target_temp = voxel_down_sample(target_temp ,0.004)
+        # source_temp = voxel_down_sample(source_temp ,0.004)
+        # target_temp = voxel_down_sample(target_temp ,0.004)
+        source_temp = source_temp.voxel_down_sample(0.004)
+        target_temp = target_temp.voxel_down_sample(0.004)
 
-        estimate_normals(source_temp, search_param = KDTreeSearchParamHybrid(
-            radius = 0.1, max_nn = 30))
-        estimate_normals(target_temp, search_param = KDTreeSearchParamHybrid(
-            radius = 0.1, max_nn = 30))
+        # estimate_normals(source_temp, search_param = KDTreeSearchParamHybrid(
+        #     radius = 0.1, max_nn = 30))
+        # estimate_normals(target_temp, search_param = KDTreeSearchParamHybrid(
+        #     radius = 0.1, max_nn = 30))
+        source_temp.estimate_normals(
+            search_param=geometry.KDTreeSearchParamHybrid(
+                radius=0.1, max_nn=30))
+        target_temp.estimate_normals(
+            search_param=geometry.KDTreeSearchParamHybrid(
+                radius=0.1, max_nn=30))
 
-        current_transformation = np.identity(4);
+        current_transformation = np.identity(4)
         # use Point-to-plane ICP registeration to obtain initial pose guess
-        result_icp_p2l = registration_icp(source_temp, target_temp, 0.02,
-                current_transformation, TransformationEstimationPointToPlane())
+        result_icp_p2l = registration.registration_icp(
+            source_temp,
+            target_temp,
+            0.02,
+            current_transformation,
+            registration.TransformationEstimationPointToPlane())
         # 0.1 is searching distance
 
-        #'''TEST
+        # '''TEST
         # current_transformation = result_icp.transformation
         # result_icp = registration_icp(source, target, 0.1,
         #     current_transformation, TransformationEstimationPointToPlane())
-        #'''
+        # '''
 
         print("----------------")
         print("initial guess from Point-to-plane ICP registeration")
@@ -137,7 +167,7 @@ class registerMulti:
         # print("Colored point cloud registration")
 
 ################
-#### testing registration
+# testing registration
 ################
         # voxel_radius = [ 0.004,0.001 ];
         # max_iter = [ 50, 30 ];
@@ -158,7 +188,7 @@ class registerMulti:
         #     current_transformation = result_icp.transformation
 
 #################
-#### original one
+# original one
 #################
         # result_icp = registration_colored_icp(source_temp, target_temp,
         #     0.001, p2l_init_trans_guess,
@@ -169,16 +199,19 @@ class registerMulti:
 #################
 
 #################
-#### double nomral ICP
+# double nomral ICP
 #################
-        result_icp = registration_icp(source_temp, target_temp, 0.01,
-                p2l_init_trans_guess, TransformationEstimationPointToPlane())
+        result_icp = registration.registration_icp(
+            source_temp,
+            target_temp,
+            0.01,
+            p2l_init_trans_guess,
+            registration.TransformationEstimationPointToPlane())
 #         result_icp = registration_icp(source_temp, target_temp, 0.002,
 #                 p2l_init_trans_guess, TransformationEstimationPointToPlane(),ICPConvergenceCriteria(relative_fitness = 1e-6,relative_rmse = 1e-6, max_iteration = 50))
 # #################
 #################
 #################
-
 
         # result_icp = registration_colored_icp(source, target,
         #     0.02, p2l_init_trans_guess)
@@ -189,14 +222,11 @@ class registerMulti:
         # draw_registration_result_original_color(
         #         source, target, result_icp.transformation)
 
-
-        #### write intermediate result for test,
-        #### but found it will make registration result worse...
-        #### ---->>>> cause source.transform will change the source!!!!!!
+        # write intermediate result for test,
+        # but found it will make registration result worse...
+        # ---->>>> cause source.transform will change the source!!!!!!
         # source.transform(result_icp.transformation)
         # temp_cloud = target + source
-        # write_point_cloud("/home/donyan/Desktop/kinect/src/scanner/src/temp/pointCloudInRviz/data/result/{}-{}.pcd".format(self.cloud_index,self.cloud_index-1), temp_cloud , write_ascii = False)
-
 
         # print("*****")
         # print(source)
@@ -204,7 +234,7 @@ class registerMulti:
 
         # print(result_icp.correspondence_set)
 ######################################
-#####   original kick-out rule
+# original kick-out rule
 ######################################
         # self.goodResultFlag = True
         # if (result_icp.fitness < 0.9 * result_icp_p2l.fitness):
@@ -213,53 +243,59 @@ class registerMulti:
         #     return result_icp.transformation
 
 ######################################
-#####   kick-out rule
+# kick-out rule
 ######################################
-#### New rule:
-#### 1/ rotation is out of plane (5 degree, or 0.087266 in radians);
-#### 2/ too big rotation;
-#### 3/ too big translation;
+# New rule:
+# 1/ rotation is out of plane (5 degree, or 0.087266 in radians);
+# 2/ too big rotation;
+# 3/ too big translation;
 
 # first calculate what is the rotation direction and rotation angle
         tf = result_icp.transformation
-        R = tf[:3,:3]  # rotation matrix
+        R = tf[:3, :3]  # rotation matrix
         so3mat = MatrixLog3(R)
         omg = so3ToVec(so3mat)
-        R_dir, theta = AxisAng3(omg) # rotation direction
-                # rotation angle (in radians)
-        theta_degree = theta / np.pi * 180 # in degree
+        R_dir, theta = AxisAng3(omg)  # rotation direction
+        # rotation angle (in radians)
+        theta_degree = theta / np.pi * 180  # in degree
         angle_with_pl_norm = self.cal_angle(self.rotation_dir, R_dir)
 
-        trans_tol= 0.5  # transformation tolerance
-        rotation_tol = 30 # 30 degrees
+        trans_tol = 0.5  # transformation tolerance
+        rotation_tol = 30  # 30 degrees
         # angle_with_pl_norm_tol = 0.087266 # in radians (= 5 degrees)
         # angle_with_pl_norm_tol = 0.174533 # in radians (= 10 degrees)
-        angle_with_pl_norm_tol = 0.35 # in radians (= 20 degrees)
-        if ( tf[0,3] > trans_tol or tf[0,3] < -trans_tol or \
-             tf[1,3] > trans_tol or tf[1,3] < -trans_tol or \
-             tf[2,3] > trans_tol or tf[2,3] < -trans_tol ):
+        angle_with_pl_norm_tol = 0.35  # in radians (= 20 degrees)
+        if (tf[0, 3] > trans_tol or tf[0, 3] < -trans_tol or
+            tf[1, 3] > trans_tol or tf[1, 3] < -trans_tol or
+                tf[2, 3] > trans_tol or tf[2, 3] < -trans_tol):
             self.goodResultFlag = False
             print(">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>")
             # print("here in 1 ")
-            rospy.logwarn('Something wrong with 1/ translation : (, turn back a little bit...')
-            rospy.logwarn('>> the translation is [{},{},{}]'.format(tf[0,3],tf[1,3],tf[2,3]))
+            rospy.logwarn(
+                'Something wrong with 1/ translation : (, turn back a little bit...')
+            rospy.logwarn('>> the translation is [{},{},{}]'.format(
+                tf[0, 3], tf[1, 3], tf[2, 3]))
             return np.identity(4)
-        elif ( theta_degree > rotation_tol or \
-               theta_degree < - rotation_tol):
+        elif (theta_degree > rotation_tol or
+              theta_degree < - rotation_tol):
             self.goodResultFlag = False
             print(">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>")
             # print("here in 2 ")
-            rospy.logwarn('Something wrong with 2/ rotation angle : (, turn back a little bit...')
-            rospy.logwarn('>> the rotation angle is {} (in degrees)'.format(theta_degree))
+            rospy.logwarn(
+                'Something wrong with 2/ rotation angle : (, turn back a little bit...')
+            rospy.logwarn(
+                '>> the rotation angle is {} (in degrees)'.format(theta_degree))
             return np.identity(4)
-        elif ( angle_with_pl_norm > angle_with_pl_norm_tol):
+        elif (angle_with_pl_norm > angle_with_pl_norm_tol):
             self.goodResultFlag = False
             print(">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>")
             print("here in 3 ")
             print(" angle with pl norm")
             print(angle_with_pl_norm)
-            rospy.logwarn('Something wrong with 3/ rotation axis : (, turn back a little bit...')
-            rospy.logwarn('>> the rotation axis is {} (in radians) with plane normal'.format(angle_with_pl_norm))
+            rospy.logwarn(
+                'Something wrong with 3/ rotation axis : (, turn back a little bit...')
+            rospy.logwarn('>> the rotation axis is {} (in radians) with plane normal'.format(
+                angle_with_pl_norm))
             return np.identity(4)
         else:
             self.goodResultFlag = True
@@ -277,11 +313,15 @@ class registerMulti:
         #     self.goodResultFlag = False
         #     return np.identity(4)
 
-    def cal_angle(self,pl_norm, R_dir):
-        angle_in_radians = \
-            np.arccos(
-                np.abs(pl_norm.x*R_dir[0]+ pl_norm.y*R_dir[1] + pl_norm.z*R_dir[2])
-                )
+    def cal_angle(self, pl_norm, R_dir):
+        angle_in_radians = np.arccos(
+            np.abs(
+                pl_norm.x *
+                R_dir[0] +
+                pl_norm.y *
+                R_dir[1] +
+                pl_norm.z *
+                R_dir[2]))
 
         return angle_in_radians
 
@@ -293,6 +333,7 @@ def main():
         rospy.spin()
     except KeyboardInterrupt:
         print("Shutting down ROS open3d_processing")
+
 
 if __name__ == "__main__":
     main()

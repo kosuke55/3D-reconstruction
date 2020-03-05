@@ -2,7 +2,6 @@
 #include<pcl/io/pcd_io.h>
 #include<pcl/point_types.h>
 #include <pcl/visualization/cloud_viewer.h>
-//"/home/donyan/Desktop/kinect/src/scanner/data/1.pcd"
 typedef pcl::PointXYZRGBA PointT;
 int
 main (int argc, char **argv)

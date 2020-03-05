@@ -22,7 +22,7 @@ main (int argc, char **argv)
     sensor_msgs::PointCloud2 output;
     pcl::PointCloud<PointT>::Ptr cloud_ptr (new pcl::PointCloud<PointT>);
 
-    std::string dir = "/home/donyan/Desktop/kinect/src/scanner/data/emulator/";
+    std::string dir = "/home/kosuke/catkin_ws/src/scanner/data/emulator/";
     int cloud_index = start_index;
     std::string filename = dir + std::to_string(cloud_index) + ".pcd";
 
